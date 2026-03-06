@@ -1,0 +1,273 @@
+
+
+
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>中韩同声传译系统 Pro</title>
+
+<style>
+
+body{
+background:#020617;
+color:white;
+font-family:Arial;
+padding:20px;
+}
+
+h2{
+font-size:28px;
+}
+
+button{
+padding:12px 24px;
+margin:5px;
+border:none;
+border-radius:8px;
+font-size:16px;
+cursor:pointer;
+}
+
+.start{background:#22c55e}
+.stop{background:#ef4444}
+.export{background:#3b82f6}
+
+.subtitle{
+background:#111827;
+padding:30px;
+border-radius:12px;
+font-size:40px;
+line-height:1.5;
+margin-top:20px;
+height:320px;
+overflow:auto;
+}
+
+.src{
+color:#e5e7eb;
+}
+
+.res{
+color:#38bdf8;
+}
+
+.history{
+margin-top:20px;
+background:#1e293b;
+padding:15px;
+border-radius:10px;
+height:200px;
+overflow:auto;
+font-size:14px;
+}
+
+audio{
+margin-top:10px;
+width:100%;
+}
+
+</style>
+</head>
+
+<body>
+
+<h2>🎤 中韩同声传译系统 PRO</h2>
+
+<button class="start" onclick="start()">开始同传</button>
+<button class="stop" onclick="stop()">停止</button>
+<button class="export" onclick="exportText()">导出字幕</button>
+
+<div class="subtitle" id="subtitle"></div>
+
+<h3>翻译记录</h3>
+<div class="history" id="history"></div>
+
+<h3>录音</h3>
+<div id="audioList"></div>
+
+<script>
+
+let recognition
+let history=[]
+let recorder
+let chunks=[]
+let stream
+
+function start(){
+
+const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition
+
+recognition=new SpeechRecognition()
+
+recognition.lang="ko-KR"
+
+recognition.continuous=true
+
+recognition.interimResults=true
+
+recognition.onresult=function(e){
+
+let result=e.results[e.results.length-1]
+
+let text=result[0].transcript
+
+if(result.isFinal){
+
+translate(text)
+
+}
+
+}
+
+recognition.start()
+
+startRecord()
+
+}
+
+function stop(){
+
+if(recognition) recognition.stop()
+
+if(recorder) recorder.stop()
+
+if(stream){
+stream.getTracks().forEach(t=>t.stop())
+}
+
+}
+
+function translate(text){
+
+fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=ko&tl=zh-CN&dt=t&q=${encodeURIComponent(text)}`)
+
+.then(res=>res.json())
+
+.then(data=>{
+
+let t=data[0][0][0]
+
+addSubtitle(text,t)
+
+})
+
+}
+
+function addSubtitle(src,res){
+
+let box=document.getElementById("subtitle")
+
+let div=document.createElement("div")
+
+div.innerHTML=`
+
+<span class="src">${src}</span>
+<br>
+<span class="res">${res}</span>
+<br><br>
+
+`
+
+box.appendChild(div)
+
+box.scrollTop=box.scrollHeight
+
+history.push(src+" -> "+res)
+
+saveHistory()
+
+renderHistory()
+
+}
+
+function saveHistory(){
+
+localStorage.setItem("translator_history",JSON.stringify(history))
+
+}
+
+function renderHistory(){
+
+let data=JSON.parse(localStorage.getItem("translator_history")||"[]")
+
+let box=document.getElementById("history")
+
+box.innerHTML=""
+
+data.forEach(i=>{
+
+let p=document.createElement("div")
+
+p.textContent=i
+
+box.appendChild(p)
+
+})
+
+}
+
+function exportText(){
+
+let data=JSON.parse(localStorage.getItem("translator_history")||"[]")
+
+let text=data.join("\n")
+
+let blob=new Blob([text],{type:"text/plain"})
+
+let a=document.createElement("a")
+
+a.href=URL.createObjectURL(blob)
+
+a.download="subtitle.txt"
+
+a.click()
+
+}
+
+async function startRecord(){
+
+stream=await navigator.mediaDevices.getUserMedia({audio:true})
+
+recorder=new MediaRecorder(stream)
+
+recorder.start()
+
+recorder.ondataavailable=e=>{
+
+chunks.push(e.data)
+
+}
+
+recorder.onstop=e=>{
+
+let blob=new Blob(chunks,{type:"audio/webm"})
+
+let url=URL.createObjectURL(blob)
+
+let audio=document.createElement("audio")
+
+audio.controls=true
+
+audio.src=url
+
+let label=document.createElement("div")
+
+label.textContent="录音 "+new Date().toLocaleString()
+
+document.getElementById("audioList").appendChild(label)
+
+document.getElementById("audioList").appendChild(audio)
+
+chunks=[]
+
+}
+
+}
+
+renderHistory()
+
+</script>
+
+</body>
+</html>
